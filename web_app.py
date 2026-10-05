@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """
-JARVIS Web Interface
+JARVIS Web Interface - Vercel compatible
 Works on Mobile, PC, Laptop browsers.
-Voice via Web Speech API + OpenAI backend.
-Deployable on Vercel / any server.
 """
 
 import os
-from fastapi import FastAPI, Request, Form
+from pathlib import Path
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,14 +15,22 @@ from pydantic import BaseModel
 
 load_dotenv()
 
+# Make paths work both locally and on Vercel
+BASE_DIR = Path(__file__).resolve().parent
+
 from modules.ai_brain import AIBrain
 from modules.commands import CommandHandler
 
 app = FastAPI(title="JARVIS AI Assistant", version="1.0")
 
-# Static & Templates
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# Static & Templates with absolute paths
+static_dir = BASE_DIR / "static"
+templates_dir = BASE_DIR / "templates"
+
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+templates = Jinja2Templates(directory=str(templates_dir))
 
 brain = AIBrain()
 owner = os.getenv("OWNER_NAME", "Sir")
@@ -45,7 +52,7 @@ async def home(request: Request):
 async def chat(req: ChatRequest):
     if not brain.is_ready():
         return JSONResponse({
-            "reply": "OpenAI API key is missing. Please configure OPENAI_API_KEY.",
+            "reply": "OpenAI API key is missing. Please set OPENAI_API_KEY in Vercel Environment Variables.",
             "error": True
         })
 
@@ -53,7 +60,6 @@ async def chat(req: ChatRequest):
     if not text:
         return JSONResponse({"reply": "I didn't catch that.", "error": False})
 
-    # Try local commands first
     response = commands.handle(text)
 
     if response == "GOODBYE":
@@ -73,9 +79,6 @@ async def status():
         "model": os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
         "name": os.getenv("JARVIS_NAME", "JARVIS")
     }
-
-# For Vercel / serverless
-# handler = app  (if needed)
 
 if __name__ == "__main__":
     import uvicorn
